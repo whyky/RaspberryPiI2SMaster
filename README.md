@@ -6,12 +6,14 @@ The driver simply handles the I2S communication. Any additional functions such a
 
 Note this was only tested on the Pi Zero, but should work on the original Raspberry Pi as well. Changing the base peripheral address in i2s_driver.h may allow it to run on a Pi 2 or Pi 3, but hasn't been tested.
 
-Also make sure that the kernel source for your current kernel version is on your device.
+Default settings: Stereo, 24-bit channels, interrupts when TX FIFO is less than full and when RX FIFO is full. The settings can be changed by modifying RXC and TXC after loading the module, but it would be easier to modify the i2s_init_default() function to suit your application.
 
 ## Installation
 
 ### Prerequisites
 The setup for this driver depends on two external pieces of code to configure the GPIO pins.  One of which is from the Raspberry Pi forums and included in this repo. The other is WiringPi which should be installed by default. Check the [WiringPi] website for installation instructions if necessary.
+
+Also make sure that the kernel source for your current kernel version is on your device.
 
 <pre><code>#Make sure there is an entry in /lib/modules matching your kernel version
 uname -r

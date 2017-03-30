@@ -2,7 +2,7 @@
 
 Low Level I2S character driver for the Raspberry Pi or Pi Zero where the Pi is configured as the I2S slave. In this case, the I2S clock and frame sync signals are provided by the codec. This avoids the issue of trying to generate the correct frequencies for audio with the Pi's oscillator.
 
-The driver simply handles the I2S communication. Any additional functions such as audio file playback or recording is handled in userspace.
+The driver simply handles the I2S communication. Any additional functions such as audio file playback or recording is handled in userspace. Communication is interrupt driven and therefore uses a significant amount of processing power. Keep that in mind during use.
 
 Note this was only tested on the Pi Zero, but should work on the original Raspberry Pi as well. Changing the base peripheral address in i2s_driver.h may allow it to run on a Pi 2 or Pi 3, but hasn't been tested.
 

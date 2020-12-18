@@ -35,9 +35,6 @@
 #define RECEIVED_DATA_SIZE        1024
 #define RECEIVED_DATA_SIZE_BYTES  4 * RECEIVED_DATA_SIZE
 
-#define DO_TX
-#define DO_RX
-
 int main(int argc, char **argv)
 {
   int i, j = 0;
@@ -66,7 +63,6 @@ int main(int argc, char **argv)
 
   nbytes = sizeof(int32_t);
 
-#ifdef DO_TX
   printf("Running TX example.\n");
 
   if(argc < 2)
@@ -90,6 +86,7 @@ int main(int argc, char **argv)
   pread(sound_fp, &wav_samples, 4, 40);
   printf("Number of samples in wav file: %d\n", wav_samples);
 
+  //wav_samples = 20000000l; 
   /* Create a huge array to hold all the samples */
   /* NOTE: Probably don't do this for large file sizes */
   wav_data = (int32_t *) malloc(wav_samples * sizeof(int32_t));
@@ -99,12 +96,21 @@ int main(int argc, char **argv)
   {
     /* Audio data starts at offset 44 */
     pread(sound_fp, &temp_wav, bytes_per_sample, 44 + bytes_per_sample*i);
+    temp_wav = temp_wav << (8 * (4 - bytes_per_sample)); 
+    //temp_wav =  temp_wav & 0xFFFF;
     *(wav_data + i) = (int32_t) temp_wav;
+    if(i < 1000) {
+	    if(i%16 == 0) {
+		printf("\n");
+	    }
+	    printf("%x ", (int32_t)temp_wav);
+    }
   }
 
   // Initialization of buffer
   for(i = 0; i < buffer_size - 1; ++i)
   {
+    //printf("wav_data_offset = %d\n", wav_data_offset);
     if(ioctl(i2s_fd, I2S_TX_BUFF_SPACE) == 0)
     {
       printf("Buffer is full.\n");
@@ -124,10 +130,12 @@ int main(int argc, char **argv)
 
   while(wav_data_offset < wav_samples)    // Loop until the file is over
   {
+    //printf("wav_data_offset = %d\n", wav_data_offset);  
     usleep(1);
     buffer_space = ioctl(i2s_fd, I2S_TX_BUFF_SPACE);
     for(j = 0; j < buffer_space; j++)
     {
+      //printf("wav_data_offset = %d\n", wav_data_offset); 
       if(wav_data_offset >= wav_samples)
       {
         break;
@@ -142,53 +150,6 @@ int main(int argc, char **argv)
 
   free(wav_data);
   close(sound_fp);
-
-#endif
-
-
-#ifdef DO_RX
-
-  FILE *rx_fp = fopen("rx.dat", "w+");
-  if(rx_fp == NULL)
-  {
-    printf("File pointer is null.");
-    return -1;
-  }
-
-  printf("Enabling RX...\n");
-  usleep(5);
-  ioctl(i2s_fd, I2S_SET_RXON, 1);
-
-  /* Loop for a bit */
-  for(i = 0; i < 50000; i++)
-  {
-    // samples_available = ioctl(i2s_fd, I2S_RX_BUFF_ITEMS);
-    if(ioctl(i2s_fd, I2S_RX_BUFF_ITEMS) > 0)
-    {
-      /* If there are more samples than the buffer can hold, fill it, otherwise copy however many samples are available */
-      transfer_length = read(i2s_fd, &received_data, RECEIVED_DATA_SIZE_BYTES);
-      fwrite(&received_data, nbytes, transfer_length, rx_fp);
-    }
-    usleep(1);
-  }
-
-  ioctl(i2s_fd, I2S_SET_RXON, 0);
-  printf("Disabling RX...\n");
-
-  // Clean up remaining samples, if any
-  samples_available = ioctl(i2s_fd, I2S_RX_BUFF_ITEMS);
-  printf("Reading remaining samples: %d.\n", samples_available);
-
-  if(samples_available > 0)
-  {
-    /* If there are more samples than the buffer can hold, fill it, otherwise copy however many samples are available */
-    transfer_length = read(i2s_fd, &received_data, RECEIVED_DATA_SIZE_BYTES);
-    fwrite(&received_data, nbytes, transfer_length, rx_fp);
-  }
-
-  fclose(rx_fp);
-
-#endif
 
   printf("Closing files.\n");
   close(i2s_fd);

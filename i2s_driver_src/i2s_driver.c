@@ -26,7 +26,13 @@
 #define SAMPLE_BUFF_LEN_BYTES   BYTES_PER_SAMPLE * SAMPLE_BUFF_LEN
 
 /* Interrupt number associated with the I2S interface */
-#define I2S_INTERRUPT 79
+//#define I2S_INTERRUPT  85  // 79
+#ifdef RPIZERO
+  #define I2S_INTERRUPT  79
+#elif defined RPITWO
+  #define I2S_INTERRUPT  85
+#endif
+
 
 MODULE_AUTHOR("TR");
 MODULE_DESCRIPTION("Low level drivers for Raspberry Pi's I2S interface.");
@@ -35,6 +41,10 @@ MODULE_LICENSE("GPL");
 /* Struct pointer to the I2S base address after remapping.
  * Experimenting with volatile, recommended for memory mapped peripherals */
 volatile struct i2s_inst *i2s;
+
+/* Struct pointer to the pcm mclk base address after remapping.
+ * Experimenting with volatile, recommended for memory mapped peripherals */
+volatile struct pcm_mclk_inst *mclk;
 
 /* Variables for driver's major number and usage indication */
 static int major;
@@ -79,15 +89,40 @@ static int i2s_init_default(void)
     return -EBUSY;
   }
 
+  //if(request_mem_region(PCM_MCLK_BASE, PCM_MCLK_SIZE, DEVICE_NAME) == NULL)     // ???
+  //{
+  //  release_mem_region(I2S_BASE, I2S_SIZE); 
+  //  printk(KERN_ALERT "Failed to request PCM MCLK memory.");
+  //  return -EBUSY;
+  //}
+
   /* Convert physical addresses into virtual addresses for the kernel to use */
   i2s = (volatile struct i2s_inst *) ioremap(I2S_BASE, I2S_SIZE);
   printk(KERN_INFO "I2S memory acquired successfully.");
+
+  /* Convert physical addresses into virtual addresses for the kernel to use */
+  mclk = (volatile struct pcm_mclk_inst *) ioremap(PCM_MCLK_BASE, PCM_MCLK_SIZE);
+  printk(KERN_INFO "PCM MCLK acquired successfully.");
 
   // Initialize software buffers
   buffer_init(&rx_buf, rx_buffer, SAMPLE_BUFF_LEN);
   buffer_init(&tx_buf, tx_buffer, SAMPLE_BUFF_LEN);
 
   wmb();
+
+  // disable pcm mclk clock
+  //mclk->control = 0x5A000000;
+  //mclk->divider = 0x5A000000;
+
+  // configure pcm mclk clock
+  //mclk->control = 0x5A000001;   // using XTAL 19.2Mhz
+  // Bits 11:0 are the mashing divider
+  // Bits 23:12 are the integer divider
+  mclk->divider = 0x5A000000 | 3<<13 | 1<<10; // 48KHz x 64bit = 3072,  19.2 / 3.072 = 6.25, 110.01
+
+  //Enabling I2S clock;
+  mclk->control = 0x5A000011;
+
   // Clear control registers
   i2s->CS_A = 0;
   i2s->MODE_A = 0;
@@ -101,15 +136,28 @@ static int i2s_init_default(void)
 
   // Use the Raspberry Pi as an I2S slave
   printk(KERN_INFO "Configuring Raspberry Pi as I2S slave...");
-  i2s->MODE_A = I2S_MODE_A_CLKM | I2S_MODE_A_FSM;
+  //i2s->MODE_A = I2S_MODE_A_CLKM | I2S_MODE_A_FSM;
+
+  //        clock input(output: default)    Frame sync out(master default)    outputs change on falling edge, inputs sampled on rising edge
+  //i2s->MODE_A = I2S_MODE_A_CLKI;
+  i2s->MODE_A = I2S_MODE_A_CLKI | I2S_MODE_A_FLEN(63) | I2S_MODE_A_FSLEN(32) ; 
+  //i2s->MODE_A = I2S_MODE_A_CLKI | I2S_MODE_A_FLEN(64) | I2S_MODE_A_FSLEN(32) ;
 
   /* Configure channels and frame width
    * Gives a channel width of 24 bits,
    * First bit of channel 1 is received on the 2nd clock cycle,
    * First bit of channel 2 is received on the 34rd clock cycle */
   printk(KERN_INFO "Setting channel width...");
-  i2s->RXC_A = I2S_RXC_A_CH1EN | I2S_RXC_A_CH1POS(1) | I2S_RXC_A_CH1WEX | I2S_RXC_A_CH1WID(0) | I2S_RXC_A_CH2EN | I2S_RXC_A_CH2POS(33) | I2S_RXC_A_CH2WEX | I2S_RXC_A_CH2WID(0);
-  i2s->TXC_A = I2S_TXC_A_CH1EN | I2S_TXC_A_CH1POS(1) | I2S_TXC_A_CH1WEX | I2S_TXC_A_CH1WID(0) | I2S_TXC_A_CH2EN | I2S_TXC_A_CH2POS(33) | I2S_TXC_A_CH2WEX | I2S_TXC_A_CH2WID(0);
+  //i2s->RXC_A = I2S_RXC_A_CH1EN | I2S_RXC_A_CH1POS(1) | I2S_RXC_A_CH1WEX | I2S_RXC_A_CH1WID(0) | I2S_RXC_A_CH2EN | I2S_RXC_A_CH2POS(33) | I2S_RXC_A_CH2WEX | I2S_RXC_A_CH2WID(0);
+  //i2s->TXC_A = I2S_TXC_A_CH1EN | I2S_TXC_A_CH1POS(1) | I2S_TXC_A_CH1WEX | I2S_TXC_A_CH1WID(0) | I2S_TXC_A_CH2EN | I2S_TXC_A_CH2POS(33) | I2S_TXC_A_CH2WEX | I2S_TXC_A_CH2WID(0);
+
+  //16 bit
+  //i2s->RXC_A = I2S_RXC_A_CH1EN | I2S_RXC_A_CH1POS(1) | I2S_RXC_A_CH1WID(8) | I2S_RXC_A_CH2EN | I2S_RXC_A_CH2POS(17) | I2S_RXC_A_CH2WID(8);
+  //i2s->TXC_A = I2S_TXC_A_CH1EN | I2S_TXC_A_CH1POS(1) | I2S_TXC_A_CH1WID(8) | I2S_TXC_A_CH2EN | I2S_TXC_A_CH2POS(17) | I2S_TXC_A_CH2WID(8);
+
+  // 32 bit
+  i2s->RXC_A = I2S_RXC_A_CH1EN | I2S_RXC_A_CH1POS(1) | I2S_RXC_A_CH1WEX | I2S_RXC_A_CH1WID(8) | I2S_RXC_A_CH2EN | I2S_RXC_A_CH2POS(33) | I2S_RXC_A_CH2WEX | I2S_RXC_A_CH2WID(8);
+  i2s->TXC_A = I2S_TXC_A_CH1EN | I2S_TXC_A_CH1POS(1) | I2S_TXC_A_CH1WEX | I2S_TXC_A_CH1WID(8) | I2S_TXC_A_CH2EN | I2S_TXC_A_CH2POS(33) | I2S_TXC_A_CH2WEX | I2S_TXC_A_CH2WID(8);
 
   // Disable Standby
   printk(KERN_INFO "Disabling standby...");
@@ -322,6 +370,8 @@ static irq_handler_t i2s_interrupt_handler(int irq, void *dev_id, struct pt_regs
    unsigned long irq_flags = 0;
    int32_t data, temp;
 
+   //printk(KERN_INFO "in i2s_interrupt_handler...");
+
    local_irq_save(irq_flags);
 
    /* Check TXW to see if samples can be written/buffer empty. */
@@ -335,28 +385,48 @@ static irq_handler_t i2s_interrupt_handler(int irq, void *dev_id, struct pt_regs
           break;
         }
 
+        if(buffer_items(&tx_buf) == 0)
+        {
+            tx_error_count++;
+            printk(KERN_INFO "TX buffer underflow.");
+            if(tx_error_count > 1000000)
+            {
+            /* Shut down to keep from hanging */
+                printk(KERN_ALERT "Buffer underflow limit reached. Disabling TX...");
+                tx_error_count = 0;
+                i2s_disable_tx();
+
+            /* Write a set of samples to stop interrupts */
+                i2s->FIFO_A = 0;
+                wmb();
+                i2s->FIFO_A = 0;
+            }
+            break;
+        }
+
+
         data = buffer_read(&tx_buf);
         wmb();
         i2s->FIFO_A = data;
 
-        if(buffer_items(&tx_buf) == 0)
-        {
-          tx_error_count++;
+        ////if(buffer_items(&tx_buf) == 0)
+        ////{
+        ////  tx_error_count++;
           // printk(KERN_INFO "TX buffer underflow.");
-          if(tx_error_count > 1000000)
-          {
+        ////  if(tx_error_count > 1000000)
+        ////  {
             /* Shut down to keep from hanging */
-            printk(KERN_ALERT "Buffer underflow limit reached. Disabling TX...");
-            tx_error_count = 0;
-            i2s_disable_tx();
+        ////    printk(KERN_ALERT "Buffer underflow limit reached. Disabling TX...");
+        ////    tx_error_count = 0;
+        ////    i2s_disable_tx();
 
             /* Write a set of samples to stop interrupts */
-            i2s->FIFO_A = 0;
-            wmb();
-            i2s->FIFO_A = 0;
-          }
-          break;
-        }
+        ////    i2s->FIFO_A = 0;
+        ////    wmb();
+        ////    i2s->FIFO_A = 0;
+        ////  }
+        ////  break;
+        ////}
       }
    }
 

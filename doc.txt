@@ -1,0 +1,6 @@
+1.
+https://unix.stackexchange.com/questions/374629/make1-lib-modules-4-9-24-v7-build-no-such-file-or-directory-stop
+sudo apt-get install raspberrypi-kernel-headers
+
+2.
+

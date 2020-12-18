@@ -37,19 +37,22 @@
 #define DEVICE_NAME "i2s_driver"
 
 /* Switch these depending on which version of the RaspPi you're using */
-#define RPIZERO   // For original Raspberry Pi and Zero
-// #define RPITWO    // For Raspberry Pi 2 or 3
+//#define RPIZERO   // For original Raspberry Pi and Zero
+#define RPITWO    // For Raspberry Pi 2 or 3
 
 /* Address Definitions */
 #ifdef RPIZERO
   #define PI_PERIPHERAL_BASE        0x20000000
-#elif RPITWO
+#elif defined RPITWO
   #define PI_PERIPHERAL_BASE        0x3F000000
 #endif
 
 #define I2S_OFFSET                0x00203000
+#define PCM_MCLK_OFFSET           0x00101098
 #define I2S_BASE                  PI_PERIPHERAL_BASE + I2S_OFFSET
 #define I2S_SIZE                  0x24          // Number of bytes used by the I2S registers
+#define PCM_MCLK_BASE             PI_PERIPHERAL_BASE + PCM_MCLK_OFFSET
+#define PCM_MCLK_SIZE             0x8
 
 /************************* BEGIN STRUCT DECLARATIONS **************************/
 
@@ -71,6 +74,11 @@ struct i2s_buffer {
   int head;
   int tail;
   int size;
+};
+
+struct pcm_mclk_inst {
+    uint32_t control;
+    uint32_t divider;
 };
 
 /************************END STRUCT DECLARATIONS ******************************/
